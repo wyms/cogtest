@@ -2,6 +2,9 @@ class CognitiveTestApp {
     constructor() {
         this.currentTest = null;
         this.testResults = [];
+        this.currentUser = null;
+        this.auth = null;
+        this.db = null;
         this.testModules = {
             memory: new MemoryTest(),
             attention: new AttentionTest(),
@@ -9,17 +12,58 @@ class CognitiveTestApp {
             language: new LanguageTest(),
             visuospatial: new VisuospatialTest()
         };
-        this.init();
+        this.initFirebase();
     }
 
-    init() {
-        this.renderMainMenu();
+    async initFirebase() {
+        // Wait for Firebase to be available
+        while (!window.Firebase) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyDxoJxZCpQ2QYPRCBOGguhXDsEDjY_K9Es",
+            authDomain: "cogtest-ee9cd.firebaseapp.com",
+            projectId: "cogtest-ee9cd",
+            storageBucket: "cogtest-ee9cd.appspot.com",
+            messagingSenderId: "53360309728",
+            appId: "1:53360309728:web:cogtest"
+        };
+
+        const app = window.Firebase.initializeApp(firebaseConfig);
+        this.auth = window.Firebase.getAuth(app);
+        this.db = window.Firebase.getFirestore(app);
+
+        // Listen for auth state changes
+        const { onAuthStateChanged } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
+        onAuthStateChanged(this.auth, (user) => {
+            this.onAuthStateChanged(user);
+        });
+    }
+
+    onAuthStateChanged(user) {
+        this.currentUser = user;
+        if (user) {
+            this.loadUserResults();
+            this.renderMainMenu();
+        } else {
+            this.testResults = [];
+            if (window.authManager) {
+                window.authManager.showLoginForm();
+            }
+        }
         this.bindEvents();
     }
 
     renderMainMenu() {
+        if (!this.currentUser) return;
+        
         const app = document.getElementById('app');
         app.innerHTML = `
+            <div class="user-info">
+                <span class="user-email">${this.currentUser.email}</span>
+                <button class="sign-out-btn" id="sign-out">Sign Out</button>
+            </div>
             <div class="main-menu">
                 <h1>CogTest - Cognitive Assessment</h1>
                 <div class="test-selection">
@@ -51,6 +95,10 @@ class CognitiveTestApp {
             if (e.target.id === 'view-results') {
                 this.showResults();
             }
+            
+            if (e.target.id === 'sign-out') {
+                this.signOut();
+            }
         });
     }
 
@@ -78,13 +126,24 @@ class CognitiveTestApp {
         });
     }
 
-    saveTestResult(testType, score, details) {
-        this.testResults.push({
+    async saveTestResult(testType, score, details) {
+        const result = {
             testType,
             score,
             details,
-            timestamp: new Date().toISOString()
-        });
+            timestamp: new Date().toISOString(),
+            userId: this.currentUser.uid
+        };
+        
+        this.testResults.push(result);
+        
+        // Save to Firestore
+        try {
+            const { addDoc, collection } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+            await addDoc(collection(this.db, 'testResults'), result);
+        } catch (error) {
+            console.error('Error saving test result:', error);
+        }
     }
 
     showResults() {
@@ -354,6 +413,37 @@ class CognitiveTestApp {
         link.click();
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
+    }
+
+    async loadUserResults() {
+        if (!this.currentUser) return;
+        
+        try {
+            const { getDocs, collection, query, where, orderBy } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+            const q = query(
+                collection(this.db, 'testResults'),
+                where('userId', '==', this.currentUser.uid),
+                orderBy('timestamp', 'desc')
+            );
+            
+            const querySnapshot = await getDocs(q);
+            this.testResults = [];
+            querySnapshot.forEach((doc) => {
+                this.testResults.push(doc.data());
+            });
+        } catch (error) {
+            console.error('Error loading user results:', error);
+            this.testResults = [];
+        }
+    }
+
+    async signOut() {
+        try {
+            const { signOut } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
+            await signOut(this.auth);
+        } catch (error) {
+            console.error('Sign out error:', error);
+        }
     }
 
     showFinalResults() {
