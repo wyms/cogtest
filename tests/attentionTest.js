@@ -121,70 +121,79 @@ class AttentionTest {
     }
 
     runDigitSpanTest(sequences, direction, instruction) {
-        let currentSequence = 0;
-        let consecutiveFails = 0;
-        let subtestScore = 0;
-        
-        const showSequence = () => {
-            if (currentSequence >= sequences.length || consecutiveFails >= 2) {
-                this.results.push({
-                    subtest: direction === 'forward' ? 'Digit Span Forward' : 'Digit Span Backward',
-                    score: subtestScore,
-                    maxScore: direction === 'forward' ? 8 : 7
-                });
-                this.score += subtestScore;
-                this.currentSubtest++;
-                this.startSubtest();
-                return;
-            }
-
-            const sequence = sequences[currentSequence];
-            const progress = ((this.currentSubtest * 33) + ((currentSequence / sequences.length) * 33)) / 100;
-            
-            const app = document.getElementById('app');
-            app.innerHTML = `
-                <div class="test-container">
-                    <div class="test-header">
-                        <h2>Digit Span ${direction === 'forward' ? 'Forward' : 'Backward'}</h2>
-                        <div class="progress-bar">
-                            <div class="progress-fill" style="width: ${progress * 100}%"></div>
-                        </div>
-                    </div>
-                    
-                    <div class="test-instructions">
-                        <p><strong>Instructions:</strong> ${instruction}</p>
-                        <p>Sequence ${currentSequence + 1} of ${sequences.length} (Length: ${sequence.length})</p>
-                    </div>
-                    
-                    <div class="sequence-display">
-                        <div class="sequence-numbers" id="sequence-display">
-                            Click "Show Sequence" to begin
-                        </div>
-                    </div>
-                    
-                    <div class="answer-section" id="answer-section" style="display: none;">
-                        <input type="text" id="digit-input" placeholder="Enter numbers separated by spaces" maxlength="20">
-                        <button class="btn-primary" id="submit-digits">Submit</button>
-                    </div>
-                    
-                    <div class="test-actions">
-                        <button class="btn-primary" id="show-sequence">Show Sequence</button>
-                    </div>
-                </div>
-            `;
-
-            document.getElementById('show-sequence').addEventListener('click', () => {
-                this.displaySequence(sequence, direction, currentSequence, consecutiveFails, subtestScore, sequences, showSequence);
-            });
+        // Store test state as class properties to avoid scope issues
+        this.digitSpanState = {
+            currentSequence: 0,
+            consecutiveFails: 0,
+            subtestScore: 0,
+            sequences: sequences,
+            direction: direction,
+            instruction: instruction
         };
-
-        showSequence();
+        
+        this.showDigitSpanSequence();
     }
 
-    displaySequence(sequence, direction, currentSequence, consecutiveFails, subtestScore, sequences, showSequence) {
+    showDigitSpanSequence() {
+        const state = this.digitSpanState;
+        
+        if (state.currentSequence >= state.sequences.length || state.consecutiveFails >= 2) {
+            this.results.push({
+                subtest: state.direction === 'forward' ? 'Digit Span Forward' : 'Digit Span Backward',
+                score: state.subtestScore,
+                maxScore: state.direction === 'forward' ? 8 : 7
+            });
+            this.score += state.subtestScore;
+            this.currentSubtest++;
+            this.startSubtest();
+            return;
+        }
+
+        const sequence = state.sequences[state.currentSequence];
+        const progress = ((this.currentSubtest * 33) + ((state.currentSequence / state.sequences.length) * 33)) / 100;
+        
+        const app = document.getElementById('app');
+        app.innerHTML = `
+            <div class="test-container">
+                <div class="test-header">
+                    <h2>Digit Span ${state.direction === 'forward' ? 'Forward' : 'Backward'}</h2>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: ${progress * 100}%"></div>
+                    </div>
+                </div>
+                
+                <div class="test-instructions">
+                    <p><strong>Instructions:</strong> ${state.instruction}</p>
+                    <p>Sequence ${state.currentSequence + 1} of ${state.sequences.length} (Length: ${sequence.length})</p>
+                </div>
+                
+                <div class="sequence-display">
+                    <div class="sequence-numbers" id="sequence-display">
+                        Click "Show Sequence" to begin
+                    </div>
+                </div>
+                
+                <div class="answer-section" id="answer-section" style="display: none;">
+                    <input type="text" id="digit-input" placeholder="Enter numbers separated by spaces" maxlength="20">
+                    <button class="btn-primary" id="submit-digits">Submit</button>
+                </div>
+                
+                <div class="test-actions">
+                    <button class="btn-primary" id="show-sequence">Show Sequence</button>
+                </div>
+            </div>
+        `;
+
+        document.getElementById('show-sequence').addEventListener('click', () => {
+            this.displayDigitSpanSequence(sequence);
+        });
+    }
+
+    displayDigitSpanSequence(sequence) {
         const display = document.getElementById('sequence-display');
         const showBtn = document.getElementById('show-sequence');
         const answerSection = document.getElementById('answer-section');
+        const state = this.digitSpanState;
         
         showBtn.style.display = 'none';
         display.innerHTML = '';
@@ -210,7 +219,7 @@ class AttentionTest {
             const userSequence = input.split(/\s+/).map(num => parseInt(num)).filter(num => !isNaN(num));
             
             let expectedSequence = [...sequence];
-            if (direction === 'backward') {
+            if (state.direction === 'backward') {
                 expectedSequence = expectedSequence.reverse();
             }
             
@@ -218,10 +227,10 @@ class AttentionTest {
                             userSequence.every((num, i) => num === expectedSequence[i]);
             
             if (isCorrect) {
-                subtestScore++;
-                consecutiveFails = 0;
+                state.subtestScore++;
+                state.consecutiveFails = 0;
             } else {
-                consecutiveFails++;
+                state.consecutiveFails++;
             }
             
             // Show feedback briefly
@@ -234,8 +243,8 @@ class AttentionTest {
             `;
             
             setTimeout(() => {
-                currentSequence++;
-                showSequence();
+                state.currentSequence++;
+                this.showDigitSpanSequence();
             }, 2000);
         };
         
